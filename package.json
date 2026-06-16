@@ -1,0 +1,17 @@
+{
+  "name": "nk-personal-assistant-proxy",
+  "version": "1.0.0",
+  "description": "Tiny CORS-safe proxy between Nana Kwame's GitHub Pages chatbot frontend and the Anthropic API.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
