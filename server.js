@@ -58,10 +58,20 @@ app.post('/v1/messages', async (req, res) => {
   try {
     const { system, messages, max_tokens, stream } = req.body || {};
 
+    // Gemini 2.5 Flash has "thinking" enabled by default, and those invisible
+    // reasoning tokens are deducted from the SAME maxOutputTokens budget as the
+    // visible answer. That silently truncates short-budget requests mid-sentence.
+    // This app doesn't need deep multi-step reasoning, so thinking is disabled
+    // entirely (thinkingBudget: 0), and the full token budget goes to visible text.
+    // We also add headroom on top of whatever the frontend asked for, since
+    // Gemini's tokenizer doesn't map 1:1 to Claude's token counts.
+    const effectiveMaxTokens = Math.max((max_tokens || 600) + 400, 700);
+
     const geminiBody = {
       contents: toGeminiContents(messages),
       generationConfig: {
-        maxOutputTokens: max_tokens || 600
+        maxOutputTokens: effectiveMaxTokens,
+        thinkingConfig: { thinkingBudget: 0 }
       }
     };
     if (system) {
@@ -95,6 +105,7 @@ app.post('/v1/messages', async (req, res) => {
       const reader = upstream.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let lastFinishReason = null;
 
       try {
         while (true) {
@@ -110,6 +121,9 @@ app.post('/v1/messages', async (req, res) => {
             try {
               const chunk = JSON.parse(payload);
               const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (chunk?.candidates?.[0]?.finishReason) {
+                lastFinishReason = chunk.candidates[0].finishReason;
+              }
               if (text) {
                 // Re-emit in the Anthropic content_block_delta shape the frontend already parses.
                 const outEvent = {
@@ -120,6 +134,9 @@ app.post('/v1/messages', async (req, res) => {
               }
             } catch (e) { /* ignore partial/non-JSON lines */ }
           }
+        }
+        if (lastFinishReason && lastFinishReason !== 'STOP') {
+          console.warn('Gemini stream finished with reason:', lastFinishReason, '- response may be truncated. Consider raising max_tokens for this call type.');
         }
       } finally {
         res.write('data: [DONE]\n\n');
@@ -146,6 +163,10 @@ app.post('/v1/messages', async (req, res) => {
     }
 
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+    const finishReason = data?.candidates?.[0]?.finishReason;
+    if (finishReason && finishReason !== 'STOP') {
+      console.warn('Gemini response finished with reason:', finishReason, '- response may be truncated. Consider raising max_tokens for this call type.');
+    }
     // Re-shape into the Anthropic-style { content: [{type, text}] } the frontend expects.
     res.status(200).json({ content: [{ type: 'text', text }] });
   } catch (err) {
