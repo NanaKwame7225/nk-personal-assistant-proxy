@@ -1,46 +1,44 @@
-# NK Personal Assistant Proxy
-
+NK Personal Assistant Proxy
 Tiny Express server that sits between the GitHub Pages chatbot
-(https://nanakwame7225.github.io/nana-kwame-personal_assistant/) and the
-Anthropic API. It exists purely to solve two problems that a static
-GitHub Pages site cannot solve on its own:
-
-1. **CORS** — `api.anthropic.com` does not allow direct browser calls from
-   arbitrary origins like GitHub Pages. This proxy calls Anthropic from a
-   server instead, and returns the response with the right CORS headers
-   so the browser accepts it.
-2. **API key safety** — the Anthropic API key lives only in this server's
-   environment variables, never in the frontend HTML/JS where anyone could
-   view-source and steal it.
-
-## Deploy to Railway
-
-1. Push this folder to its own GitHub repo (e.g. `nk-personal-assistant-proxy`),
-   or deploy directly from this folder using the Railway CLI.
-2. In Railway, create a new project from that repo.
-3. Under the service's **Variables** tab, add:
-   - `ANTHROPIC_API_KEY` = your real Anthropic API key (starts with `sk-ant-`)
-   - `ALLOWED_ORIGIN` = `https://nanakwame7225.github.io` (already the default,
-     only needed if you ever change the frontend's domain)
-4. Deploy. Railway will run `npm install` then `npm start` automatically.
-5. Once live, Railway gives you a public URL like:
-   `https://nk-personal-assistant-proxy-production.up.railway.app`
-6. Test it: `curl https://YOUR-RAILWAY-URL/health` should return `{"ok":true}`.
-
-## Point the frontend at it
-
-In the chatbot's HTML file, change every
-
-```js
-fetch('https://api.anthropic.com/v1/messages', ...)
-```
-
-to
-
-```js
-fetch('https://YOUR-RAILWAY-URL/v1/messages', ...)
-```
-
-Do **not** send the `x-api-key` header from the frontend anymore — the proxy
-adds it server-side. Everything else (model, messages, stream, max_tokens)
-stays exactly the same, since this proxy is a transparent pass-through.
+(https://nanakwame7225.github.io/nana-kwame-personal_assistant/) and an AI
+model provider. It now uses Google's Gemini API (free tier) as the
+backing model instead of the Anthropic API, while keeping the exact same
+`/v1/messages` request/response shape the frontend already calls. This
+means the HTML/JS frontend never needed to change — only this proxy did.
+Why this exists
+CORS — calling AI provider APIs directly from a static GitHub Pages
+site gets blocked by the browser, since most providers don't allow
+arbitrary browser origins. This proxy calls the provider from a server
+instead, and returns the response with the right CORS headers.
+API key safety — the API key lives only in this server's environment
+variables, never in frontend HTML/JS where anyone could view-source and
+steal it.
+Provider independence — the frontend speaks one stable "API shape"
+to this proxy. If you ever want to switch providers again (e.g. to Groq,
+OpenRouter, or back to Anthropic once billing is sorted), you only need
+to edit this one file — the frontend keeps working unchanged.
+Deploy to Railway
+Push this folder (`server.js`, `package.json`, `README.md`) to its own
+GitHub repo, e.g. `nk-personal-assistant-proxy` (or update your existing
+one if you already deployed it once).
+In Railway, create/open the project connected to that repo.
+Under the service's Variables tab, set:
+`GEMINI_API_KEY` = your free Google AI Studio API key
+`ALLOWED_ORIGIN` = `https://nanakwame7225.github.io` (already the
+default; only needed if your frontend's domain ever changes)
+`GEMINI_MODEL` = optional, defaults to `gemini-2.5-flash`
+Remove the old `ANTHROPIC_API_KEY` variable if it's still set — it's
+no longer used and there's no reason to keep it around.
+Railway redeploys automatically. Test with:
+`curl https://YOUR-RAILWAY-URL/health` → should return
+`{"ok":true,"provider":"gemini","model":"gemini-2.5-flash"}`
+Frontend
+No changes needed. The frontend's `PROXY_URL` constant should already point
+at your Railway URL + `/v1/messages` from the previous setup. As long as
+that's correct, the chatbot will now run on Gemini under the hood.
+Free tier notes
+Google's Gemini free tier has daily and per-minute rate limits (commonly
+~15 requests/minute and ~1,500 requests/day on Flash models, though Google
+can adjust these). If you ever hit a rate limit, the chatbot will show a
+connection error until the limit resets — this is expected behavior on a
+free tier, not a bug.
