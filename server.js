@@ -121,11 +121,17 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/health', (req, res) => {
+  const crypto = require('crypto');
+  const secretFingerprint = TELEGRAM_WEBHOOK_SECRET
+    ? crypto.createHash('sha256').update(TELEGRAM_WEBHOOK_SECRET).digest('hex').slice(0, 12)
+    : null;
   res.json({
     ok: true,
     provider: 'gemini',
     model: GEMINI_MODEL,
-    telegram: Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_WEBHOOK_SECRET)
+    telegram: Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_WEBHOOK_SECRET),
+    webhookSecretLength: TELEGRAM_WEBHOOK_SECRET ? TELEGRAM_WEBHOOK_SECRET.length : 0,
+    webhookSecretFingerprint: secretFingerprint
   });
 });
 
