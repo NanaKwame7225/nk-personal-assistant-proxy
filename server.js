@@ -26,11 +26,11 @@ const cors = require('cors');
 
 const app = express();
 
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://nanakwame7225.github.io';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const ALLOWED_ORIGIN = (process.env.ALLOWED_ORIGIN || 'https://nanakwame7225.github.io').trim();
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const TELEGRAM_WEBHOOK_SECRET = (process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
 const PORT = process.env.PORT || 3000;
 
 if (!GEMINI_API_KEY) {
