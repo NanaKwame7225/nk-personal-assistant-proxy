@@ -106,6 +106,12 @@ CERTIFICATIONS RULE:
 - If a specific role or industry is mentioned, only mention the certifications most relevant to it, woven naturally into a paragraph
 - If no role or context has been mentioned, give a general but still paragraph-style overview of the full certification portfolio`;
 
+// Log every incoming request so Railway's logs show real traffic for debugging.
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.path}`);
+  next();
+});
+
 app.use(cors({
   origin: ALLOWED_ORIGIN,
   methods: ['POST', 'OPTIONS'],
@@ -342,6 +348,11 @@ if (TELEGRAM_BOT_TOKEN && TELEGRAM_WEBHOOK_SECRET) {
 } else {
   console.warn('TELEGRAM_BOT_TOKEN or TELEGRAM_WEBHOOK_SECRET not set — Telegram bot is disabled, web chat proxy still works.');
 }
+
+app.use((req, res) => {
+  console.log(`[404 UNMATCHED] ${req.method} ${req.originalUrl}`);
+  res.status(404).send('Not Found');
+});
 
 app.listen(PORT, () => {
   console.log(`Proxy listening on port ${PORT}, allowing origin ${ALLOWED_ORIGIN}, model ${GEMINI_MODEL}`);
