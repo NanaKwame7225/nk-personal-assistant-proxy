@@ -112,13 +112,22 @@ app.use((req, res, next) => {
   next();
 });
 
+// ALLOWED_ORIGIN may be a single origin or a comma-separated list of origins.
+// Both Nana's and Emma's assistants are served from the same GitHub Pages
+// account (https://nanakwame7225.github.io), so the default covers both, but
+// this also supports adding more origins later without code changes.
+const ALLOWED_ORIGINS = ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(Boolean);
 app.use(cors({
-  origin: ALLOWED_ORIGIN,
+  origin: function (origin, callback) {
+    // Allow non-browser tools (no origin) and any origin in the allow-list.
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
   methods: ['POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '25mb' })); // raised for voice-note audio uploads
 
 app.get('/health', (req, res) => {
   const crypto = require('crypto');
@@ -269,6 +278,62 @@ app.post('/v1/messages', async (req, res) => {
   } catch (err) {
     console.error('Proxy error:', err);
     res.status(502).json({ error: { message: 'Proxy failed to reach Gemini API.' } });
+  }
+});
+
+
+// ---------- Voice-note transcription (used by both web assistants) ----------
+//
+// The frontend records a voice note in the browser, base64-encodes it, and
+// POSTs { audio: "<base64>", mime: "audio/webm" } here. We forward it to
+// Gemini (same API key as the chat) which transcribes the speech and returns
+// the plain text. This is far more reliable than the browser Web Speech API.
+
+app.post('/transcribe', async (req, res) => {
+  try {
+    const { audio, mime } = req.body || {};
+    if (!audio) {
+      return res.status(400).json({ error: 'No audio provided' });
+    }
+
+    // Gemini accepts inline audio as base64 with a mime type. webm/ogg/mp4/wav
+    // are all supported. We ask it to return ONLY the transcript text.
+    const geminiBody = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: 'Transcribe this voice note to plain text. Return ONLY the exact words spoken, with no preamble, no quotation marks, and no commentary. If nothing intelligible was said, return an empty response.' },
+          { inline_data: { mime_type: (mime || 'audio/webm'), data: audio } }
+        ]
+      }],
+      generationConfig: {
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+    const upstream = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY
+      },
+      body: JSON.stringify(geminiBody)
+    });
+
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      console.error('Gemini transcription error:', upstream.status, data);
+      return res.status(502).json({ error: 'Transcription failed' });
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim() || '';
+    return res.json({ text });
+
+  } catch (err) {
+    console.error('Transcribe route error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
